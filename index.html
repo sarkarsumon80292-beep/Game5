@@ -1,0 +1,251 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tic Tac Toe - Pro Sound Edition</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+    /* Styling vahi hai jo aapne di thi */
+    body {
+        margin: 0;
+        font-family: 'Poppins', sans-serif;
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        color: white;
+    }
+
+    .game-container {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        padding: 25px;
+        width: 320px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        text-align: center;
+    }
+
+    h1 { margin-bottom: 10px; font-size: 26px; }
+    .status { margin: 10px 0 15px; font-size: 16px; font-weight: bold; }
+    .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    
+    .cell {
+        width: 90px;
+        height: 90px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 15px;
+        font-size: 36px;
+        font-weight: bold;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .cell:hover { background: rgba(255,255,255,0.35); transform: scale(1.05); }
+    .cell.taken { pointer-events: none; }
+
+    .restart-btn {
+        margin-top: 20px;
+        padding: 10px;
+        width: 100%;
+        border: none;
+        border-radius: 12px;
+        background: #ff9800;
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: 0.3s;
+    }
+    .restart-btn:hover { background: #e68900; }
+</style>
+</head>
+
+<body>
+
+<div class="game-container">
+    <h1>❌ Tic Tac Toe ⭕</h1>
+    <div class="status" id="status">Your Turn</div>
+    <div class="board" id="board"></div>
+    <button class="restart-btn" onclick="restartGame()">Restart Game</button>
+</div>
+
+<script>
+    const boardElement = document.getElementById("board");
+    const statusText = document.getElementById("status");
+
+    let board = ["", "", "", "", "", "", "", "", ""];
+    const human = "X";
+    const ai = "O";
+    let gameOver = false;
+
+    // --- SOUND ENGINE ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playSound(freq, type, duration) {
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.type = type; 
+        oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + duration);
+    }
+
+    const sounds = {
+        click: () => playSound(600, 'sine', 0.1),
+        win: () => {
+            playSound(500, 'sine', 0.2);
+            setTimeout(() => playSound(700, 'sine', 0.2), 100);
+            setTimeout(() => playSound(900, 'sine', 0.4), 200);
+        },
+        draw: () => {
+            playSound(300, 'triangle', 0.3);
+            setTimeout(() => playSound(200, 'triangle', 0.5), 200);
+        }
+    };
+    // --------------------
+
+    function createBoard() {
+        boardElement.innerHTML = "";
+        board.forEach((cell, index) => {
+            const div = document.createElement("div");
+            div.classList.add("cell");
+            div.innerText = cell;
+            if (cell !== "") div.classList.add("taken");
+            div.addEventListener("click", () => playerMove(index));
+            boardElement.appendChild(div);
+        });
+    }
+
+    function playerMove(index) {
+        if (board[index] === "" && !gameOver) {
+            sounds.click(); // Sound on click
+            board[index] = human;
+            createBoard();
+
+            if (checkWinner(board, human)) {
+                statusText.innerText = "🎉 You Win!";
+                sounds.win(); // Sound on win
+                gameOver = true;
+                return;
+            }
+
+            if (isDraw()) {
+                statusText.innerText = "😐 Draw!";
+                sounds.draw();
+                gameOver = true;
+                return;
+            }
+
+            statusText.innerText = "AI Thinking...";
+            setTimeout(aiMove, 500);
+        }
+    }
+
+    function aiMove() {
+        if(gameOver) return;
+        let bestMove = minimax(board, ai).index;
+        board[bestMove] = ai;
+        sounds.click(); // AI move sound
+        createBoard();
+
+        if (checkWinner(board, ai)) {
+            statusText.innerText = "🤖 AI Wins!";
+            sounds.draw(); // Sad sound for losing
+            gameOver = true;
+            return;
+        }
+
+        if (isDraw()) {
+            statusText.innerText = "😐 Draw!";
+            sounds.draw();
+            gameOver = true;
+            return;
+        }
+
+        statusText.innerText = "Your Turn";
+    }
+
+    function minimax(newBoard, player) {
+        let availSpots = newBoard.map((v, i) => v === "" ? i : null).filter(v => v !== null);
+
+        if (checkWinner(newBoard, human)) return { score: -10 };
+        if (checkWinner(newBoard, ai)) return { score: 10 };
+        if (availSpots.length === 0) return { score: 0 };
+
+        let moves = [];
+        for (let i = 0; i < availSpots.length; i++) {
+            let move = {};
+            move.index = availSpots[i];
+            newBoard[availSpots[i]] = player;
+
+            if (player === ai) {
+                move.score = minimax(newBoard, human).score;
+            } else {
+                move.score = minimax(newBoard, ai).score;
+            }
+
+            newBoard[availSpots[i]] = "";
+            moves.push(move);
+        }
+
+        let bestMove;
+        if (player === ai) {
+            let bestScore = -10000;
+            for (let i = 0; i < moves.length; i++) {
+                if (moves[i].score > bestScore) {
+                    bestScore = moves[i].score;
+                    bestMove = i;
+                }
+            }
+        } else {
+            let bestScore = 10000;
+            for (let i = 0; i < moves.length; i++) {
+                if (moves[i].score < bestScore) {
+                    bestScore = moves[i].score;
+                    bestMove = i;
+                }
+            }
+        }
+        return moves[bestMove];
+    }
+
+    function checkWinner(b, player) {
+        const winPatterns = [
+            [0,1,2],[3,4,5],[6,7,8],
+            [0,3,6],[1,4,7],[2,5,8],
+            [0,4,8],[2,4,6]
+        ];
+        return winPatterns.some(p => p.every(i => b[i] === player));
+    }
+
+    function isDraw() {
+        return board.every(cell => cell !== "");
+    }
+
+    function restartGame() {
+        board = ["", "", "", "", "", "", "", "", ""];
+        gameOver = false;
+        statusText.innerText = "Your Turn";
+        sounds.click(); // Restart sound
+        createBoard();
+    }
+
+    createBoard();
+</script>
+
+</body>
+</html>
